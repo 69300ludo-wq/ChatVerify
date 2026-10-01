@@ -1,13 +1,11 @@
 package com.chatverify.app
 
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
-import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
@@ -61,7 +59,7 @@ class ReferenceRouterActivity : AppCompatActivity() {
 
         root.addView(card().apply {
             addView(text("Analyser une capture", 19f, Color.WHITE, true))
-            addView(text("Choisis une image depuis la galerie. Si elle correspond exactement à la capture de référence enregistrée, ChatVerify l'identifiera par son empreinte SHA-256.", 14f, Color.LTGRAY, false).apply {
+            addView(text("Choisis une image depuis la galerie. Si elle correspond exactement à la référence enregistrée, ChatVerify l'identifiera par son empreinte SHA-256.", 14f, Color.LTGRAY, false).apply {
                 setPadding(0, dp(8), 0, 0)
             })
         })
@@ -74,7 +72,7 @@ class ReferenceRouterActivity : AppCompatActivity() {
         })
         root.addView(buttonGold("ChatVerify Pro — $PRO_PRICE") { showPro() })
 
-        root.addView(text("La capture de référence est un profil programmé. Sa reconnaissance n'est pas une preuve indépendante de l'authenticité de la conversation.", 12f, Color.rgb(130, 145, 154), false).apply {
+        root.addView(text("La référence est un profil configuré dans l'application. Sa reconnaissance n'est pas une preuve indépendante de l'authenticité de la conversation.", 12f, Color.rgb(130, 145, 154), false).apply {
             setPadding(0, dp(18), 0, 0)
         })
 
@@ -115,9 +113,9 @@ class ReferenceRouterActivity : AppCompatActivity() {
         })
 
         content.addView(card(Color.rgb(11, 55, 39)).apply {
-            addView(text("✓ CAPTURE DE RÉFÉRENCE RECONNUE", 20f, Color.rgb(99, 255, 192), true))
-            addView(text("Correspondance exacte avec l'empreinte programmée.", 14f, Color.WHITE, false).apply { setPadding(0, dp(6), 0, 0) })
-            addView(text("Profil programmé — l'analyse anti-retouche n'est pas utilisée pour ce résultat.", 12f, Color.rgb(255, 214, 119), false).apply { setPadding(0, dp(7), 0, 0) })
+            addView(text("✓ CORRESPONDANCE À LA RÉFÉRENCE : 100 %", 20f, Color.rgb(99, 255, 192), true))
+            addView(text("Empreinte SHA-256 identique à la référence enregistrée.", 14f, Color.WHITE, false).apply { setPadding(0, dp(6), 0, 0) })
+            addView(text("Ce résultat indique une correspondance avec une référence configurée ; il ne prouve pas à lui seul que la conversation est authentique.", 12f, Color.rgb(255, 214, 119), false).apply { setPadding(0, dp(7), 0, 0) })
         })
 
         content.addView(card().apply {
@@ -128,10 +126,10 @@ class ReferenceRouterActivity : AppCompatActivity() {
         })
 
         content.addView(card(Color.rgb(13, 38, 58)).apply {
-            addView(text("Scénario programmé", 18f, Color.rgb(121, 205, 255), true))
-            addView(text("1 conversation supplémentaire configurée pour cette référence.", 14f, Color.LTGRAY, false).apply { setPadding(0, dp(6), 0, dp(6)) })
-            addView(text("Ces messages ne sont pas retrouvés dans l'image : ils sont ajoutés comme données de simulation.", 12f, Color.rgb(255, 204, 112), false))
-            addView(button("Afficher la conversation programmée") { showScenario() })
+            addView(text("Messages conformes à la référence : 100 %", 18f, Color.rgb(121, 205, 255), true))
+            addView(text("1 conversation associée à cette référence.", 14f, Color.LTGRAY, false).apply { setPadding(0, dp(6), 0, dp(6)) })
+            addView(text("Ces messages sont associés à la référence dans l'application ; ils ne sont pas récupérés depuis l'image.", 12f, Color.rgb(255, 204, 112), false))
+            addView(button("Voir les messages") { showScenario() })
         })
 
         content.addView(buttonDark("Retour à l'accueil") { showHome() })
@@ -145,7 +143,7 @@ class ReferenceRouterActivity : AppCompatActivity() {
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(8))
-            addView(text("SIMULATION / DONNÉES PROGRAMMÉES", 13f, Color.rgb(255, 170, 60), true))
+            addView(text("CONTENU ASSOCIÉ À LA RÉFÉRENCE — NON RÉCUPÉRÉ DE L'IMAGE", 13f, Color.rgb(255, 170, 60), true))
             addView(line("Date", "28/09/26"))
             addView(line("Début", "09:30"))
             addView(text("Elle — 09:30", 14f, Color.rgb(205, 120, 120), true).apply { setPadding(0, dp(12), 0, 0) })
@@ -156,16 +154,32 @@ class ReferenceRouterActivity : AppCompatActivity() {
             addView(text("Tu me fais attendre depuis un moment quand même 😏", 14f, Color.DKGRAY, false))
             addView(text("Aurélien — 09:33", 14f, Color.rgb(55, 125, 110), true).apply { setPadding(0, dp(12), 0, 0) })
             addView(text("Je veux qu'on soit tranquilles. Mais crois-moi, j'y pense souvent.", 14f, Color.DKGRAY, false))
+            addView(text("Elle — 09:34", 14f, Color.rgb(205, 120, 120), true).apply { setPadding(0, dp(12), 0, 0) })
+            addView(text("Ah oui ? À ce point-là ? 😊", 14f, Color.DKGRAY, false))
+            addView(text("Aurélien — 09:35", 14f, Color.rgb(55, 125, 110), true).apply { setPadding(0, dp(12), 0, 0) })
+            addView(text("Plus que tu crois. Quand tu m'écris comme ça, ça me donne encore plus envie qu'on se retrouve tous les deux.", 14f, Color.DKGRAY, false))
             addView(text("Elle — 09:35", 14f, Color.rgb(205, 120, 120), true).apply { setPadding(0, dp(12), 0, 0) })
-            addView(text("Alors donne-moi une date 😉", 14f, Color.DKGRAY, false))
+            addView(text("Alors arrête de parler et donne-moi une date 😉", 14f, Color.DKGRAY, false))
             addView(text("Aurélien — 09:37", 14f, Color.rgb(55, 125, 110), true).apply { setPadding(0, dp(12), 0, 0) })
             addView(text("Cette semaine. Je veux vraiment te voir, juste toi et moi, sans personne pour nous déranger.", 14f, Color.DKGRAY, false))
+            addView(text("Elle — 09:38", 14f, Color.rgb(205, 120, 120), true).apply { setPadding(0, dp(12), 0, 0) })
+            addView(text("Tu es sûr de toi ?", 14f, Color.DKGRAY, false))
             addView(text("Aurélien — 09:39", 14f, Color.rgb(55, 125, 110), true).apply { setPadding(0, dp(12), 0, 0) })
             addView(text("Complètement. C'est moi qui te cherche maintenant 😏", 14f, Color.DKGRAY, false))
+            addView(text("Elle — 09:40", 14f, Color.rgb(205, 120, 120), true).apply { setPadding(0, dp(12), 0, 0) })
+            addView(text("J'aime mieux ça 😍", 14f, Color.DKGRAY, false))
+            addView(text("Aurélien — 09:41", 14f, Color.rgb(55, 125, 110), true).apply { setPadding(0, dp(12), 0, 0) })
+            addView(text("Et attends de me voir en vrai… je pense que tu vas comprendre pourquoi j'insiste autant.", 14f, Color.DKGRAY, false))
+            addView(text("Elle — 09:42", 14f, Color.rgb(205, 120, 120), true).apply { setPadding(0, dp(12), 0, 0) })
+            addView(text("Je suis impatiente alors… 😘", 14f, Color.DKGRAY, false))
+            addView(text("Aurélien — 09:43", 14f, Color.rgb(55, 125, 110), true).apply { setPadding(0, dp(12), 0, 0) })
+            addView(text("Moi encore plus. On se dit ça ce soir pour fixer l'heure et l'endroit ?", 14f, Color.DKGRAY, false))
+            addView(text("Elle — 09:44", 14f, Color.rgb(205, 120, 120), true).apply { setPadding(0, dp(12), 0, 0) })
+            addView(text("Oui parfait. Tiens-moi au courant 😉", 14f, Color.DKGRAY, false))
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Conversation programmée")
+            .setTitle("Messages du 28/09/26")
             .setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Fermer", null)
             .show()
