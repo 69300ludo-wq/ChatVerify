@@ -23,6 +23,10 @@
 
         <activity
             android:name=".BrandLauncherActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ReferenceRouterActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
