@@ -13,6 +13,10 @@
 
         <activity
             android:name=".ForensicsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ForensicsActivityV2"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
