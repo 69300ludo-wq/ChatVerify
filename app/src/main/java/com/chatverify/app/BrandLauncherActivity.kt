@@ -15,8 +15,15 @@ import androidx.appcompat.app.AppCompatActivity
 
 class BrandLauncherActivity : AppCompatActivity() {
 
+    companion object {
+        private const val BUNDLED_REFERENCE_HASH = "79aa10537252d25a325ff03ccc6bbee2403cdfb96747f5b2b453952b66e21824"
+        private const val BUNDLED_REFERENCE_VERSION_KEY = "bundled_reference_v123_applied"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        seedBundledReference()
+
         window.statusBarColor = Color.rgb(7, 15, 20)
         window.navigationBarColor = Color.rgb(7, 15, 20)
 
@@ -59,6 +66,21 @@ class BrandLauncherActivity : AppCompatActivity() {
             startActivity(Intent(this, ForensicsActivityV2::class.java))
             finish()
         }, 800)
+    }
+
+    private fun seedBundledReference() {
+        val prefs = getSharedPreferences("chatverify", MODE_PRIVATE)
+        if (!prefs.getBoolean(BUNDLED_REFERENCE_VERSION_KEY, false)) {
+            prefs.edit()
+                .putString("special_hash", BUNDLED_REFERENCE_HASH)
+                .putString("special_contact", "06 89 90 98 87")
+                .putString("special_datetime", "Heure visible : 16:58")
+                .putString("special_brand", "Indéterminée")
+                .putString("special_message", "")
+                .putString("special_timeline", "")
+                .putBoolean(BUNDLED_REFERENCE_VERSION_KEY, true)
+                .apply()
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
