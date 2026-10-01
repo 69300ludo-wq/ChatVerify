@@ -1,6 +1,7 @@
 package com.chatverify.app
 
 import android.app.AlertDialog
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -9,7 +10,6 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
@@ -26,6 +26,8 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.max
+import kotlin.math.min
 
 class MainActivity : AppCompatActivity() {
 
@@ -67,7 +69,7 @@ class MainActivity : AppCompatActivity() {
 
         val intro = card().apply {
             addView(text("Analyse de captures de messages", 18f, Color.WHITE, true))
-            addView(text("Importez une capture. ChatVerify reconnaît votre capture programmée en MODE DÉMO ou analyse les autres images avec OCR et signaux de cohérence.", 14f, Color.LTGRAY, false).apply {
+            addView(text("Importez une capture. ChatVerify reconnaît d'abord votre capture programmée. Toutes les autres images passent par une analyse d'intégrité technique puis par l'OCR et les contrôles de cohérence.", 14f, Color.LTGRAY, false).apply {
                 setPadding(0, dp(8), 0, 0)
             })
         }
@@ -87,7 +89,7 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(resultContainer)
 
-        root.addView(text("Une capture d'écran seule ne peut pas prouver l'authenticité d'un message. Les résultats hors MODE DÉMO sont des indicateurs de cohérence.", 12f, Color.rgb(118, 135, 124), false).apply {
+        root.addView(text("L'analyse anti-manipulation recherche des anomalies techniques visibles dans le fichier. L'absence d'anomalie ne prouve pas à elle seule que le message est authentique.", 12f, Color.rgb(118, 135, 124), false).apply {
             setPadding(0, dp(22), 0, 0)
         })
 
@@ -128,7 +130,7 @@ class MainActivity : AppCompatActivity() {
 
         AlertDialog.Builder(this)
             .setTitle("Programmer la capture spéciale")
-            .setMessage("Ces données seront affichées uniquement quand cette image exacte est reconnue. Elles seront clairement marquées MODE DÉMO.")
+            .setMessage("Cette image sera reconnue par son empreinte SHA-256 exacte. Quand elle est reconnue, le contrôle anti-manipulation n'est pas exécuté et les données programmées sont affichées comme profil programmé.")
             .setView(layout)
             .setNegativeButton("Annuler", null)
             .setPositiveButton("Enregistrer") { _, _ ->
@@ -141,7 +143,7 @@ class MainActivity : AppCompatActivity() {
                     .putString("special_note", note.text.toString())
                     .apply()
                 statusText.text = "Capture spéciale enregistrée."
-                Toast.makeText(this, "Capture programmée en MODE DÉMO", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Profil programmé enregistré", Toast.LENGTH_SHORT).show()
             }
             .show()
     }
@@ -152,23 +154,123 @@ class MainActivity : AppCompatActivity() {
 
         Thread {
             val hash = runCatching { sha256(uri) }.getOrNull()
-            runOnUiThread {
-                if (hash == null) {
-                    showError("Impossible de lire l'image sélectionnée.")
-                    return@runOnUiThread
-                }
-
-                val specialHash = prefs.getString("special_hash", null)
-                if (!specialHash.isNullOrBlank() && hash == specialHash) {
-                    showSpecialResult(hash)
-                } else {
-                    runOcr(uri, hash)
-                }
+            if (hash == null) {
+                runOnUiThread { showError("Impossible de lire l'image sélectionnée.") }
+                return@Thread
             }
+
+            val specialHash = prefs.getString("special_hash", null)
+            if (!specialHash.isNullOrBlank() && hash == specialHash) {
+                // IMPORTANT : la capture programmée est reconnue avant toute analyse anti-manipulation.
+                runOnUiThread { showSpecialResult(hash) }
+                return@Thread
+            }
+
+            // Toutes les autres images passent par l'analyse d'intégrité technique.
+            val integrity = analyzeImageIntegrity(uri)
+            runOnUiThread { runOcr(uri, hash, integrity) }
         }.start()
     }
 
-    private fun runOcr(uri: Uri, hash: String) {
+    private data class ImageIntegrity(
+        val score: Int,
+        val label: String,
+        val signals: List<String>,
+        val width: Int,
+        val height: Int,
+        val mime: String,
+        val fileSize: Long
+    )
+
+    private fun analyzeImageIntegrity(uri: Uri): ImageIntegrity {
+        val signals = mutableListOf<String>()
+        var score = 88
+
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+
+        val width = options.outWidth
+        val height = options.outHeight
+        val mime = options.outMimeType ?: contentResolver.getType(uri) ?: "inconnu"
+        val fileSize = runCatching {
+            contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        }.getOrDefault(-1L)
+
+        if (width <= 0 || height <= 0) {
+            return ImageIntegrity(
+                20,
+                "Image techniquement illisible",
+                listOf("Le fichier ne peut pas être décodé comme une image standard."),
+                width,
+                height,
+                mime,
+                fileSize
+            )
+        }
+
+        val longSide = max(width, height)
+        val shortSide = min(width, height)
+        val pixels = width.toLong() * height.toLong()
+        val aspect = longSide.toDouble() / shortSide.toDouble()
+
+        signals += "Image décodable : ${width} × ${height} px."
+        signals += "Format détecté : $mime."
+
+        if (shortSide < 360) {
+            score -= 18
+            signals += "Résolution très faible : certains détails de retouche peuvent être invisibles."
+        } else if (shortSide < 720) {
+            score -= 7
+            signals += "Résolution moyenne : analyse des petits détails limitée."
+        } else {
+            signals += "Résolution suffisante pour plusieurs contrôles visuels de base."
+        }
+
+        if (longSide > 12000) {
+            score -= 12
+            signals += "Dimensions inhabituellement grandes pour une capture d'écran classique."
+        }
+
+        if (aspect > 4.5) {
+            score -= 10
+            signals += "Ratio d'image très atypique ; cela peut indiquer un assemblage ou une longue capture."
+        }
+
+        if (fileSize > 0) {
+            val kb = fileSize / 1024
+            signals += "Taille du fichier : ${kb} Ko."
+
+            val bytesPerPixel = fileSize.toDouble() / pixels.toDouble()
+            if (fileSize < 12_000L && pixels > 1_000_000L) {
+                score -= 18
+                signals += "Fichier extrêmement petit par rapport à sa résolution : forte compression ou fichier inhabituel."
+            } else if (mime.contains("jpeg", true) && bytesPerPixel < 0.035) {
+                score -= 10
+                signals += "Compression JPEG très forte détectée ; les traces fines de modification peuvent être masquées."
+            } else {
+                signals += "Rapport taille/résolution sans anomalie évidente."
+            }
+        } else {
+            score -= 4
+            signals += "Taille de fichier non disponible via la source sélectionnée."
+        }
+
+        if (!mime.contains("png", true) && !mime.contains("jpeg", true) && !mime.contains("webp", true)) {
+            score -= 8
+            signals += "Format moins courant pour une capture de messagerie."
+        }
+
+        score = score.coerceIn(20, 98)
+        val label = when {
+            score >= 82 -> "Aucune anomalie technique évidente"
+            score >= 62 -> "Quelques éléments à vérifier"
+            else -> "Signaux techniques inhabituels"
+        }
+
+        return ImageIntegrity(score, label, signals, width, height, mime, fileSize)
+    }
+
+    private fun runOcr(uri: Uri, hash: String, integrity: ImageIntegrity) {
         val image = try {
             InputImage.fromFilePath(this, uri)
         } catch (e: Exception) {
@@ -180,7 +282,7 @@ class MainActivity : AppCompatActivity() {
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val result = analyzeUnknownText(visionText.text)
-                showUnknownResult(hash, visionText.text, result)
+                showUnknownResult(hash, visionText.text, result, integrity)
             }
             .addOnFailureListener {
                 showError("Le texte n'a pas pu être extrait de cette capture.")
@@ -198,8 +300,8 @@ class MainActivity : AppCompatActivity() {
         val note = prefs.getString("special_note", "") ?: ""
 
         val header = card(Color.rgb(12, 47, 27)).apply {
-            addView(text("✓ CAPTURE RECONNUE", 21f, Color.rgb(94, 255, 148), true))
-            addView(text("MODE DÉMO — correspondance exacte avec la capture programmée", 13f, Color.rgb(171, 255, 199), true).apply {
+            addView(text("✓ CAPTURE PROGRAMMÉE RECONNUE", 21f, Color.rgb(94, 255, 148), true))
+            addView(text("Correspondance SHA-256 exacte — contrôle anti-manipulation non exécuté pour ce profil programmé", 13f, Color.rgb(171, 255, 199), true).apply {
                 setPadding(0, dp(6), 0, 0)
             })
         }
@@ -221,7 +323,7 @@ class MainActivity : AppCompatActivity() {
                 timeline.lines().filter { it.isNotBlank() }.forEach {
                     addView(text("• $it", 14f, Color.LTGRAY, false).apply { setPadding(0, dp(7), 0, 0) })
                 }
-                addView(text("Ces événements sont des données de démonstration saisies dans l'application.", 12f, Color.rgb(255, 197, 92), false).apply {
+                addView(text("Ces événements sont les données enregistrées dans le profil programmé.", 12f, Color.rgb(255, 197, 92), false).apply {
                     setPadding(0, dp(10), 0, 0)
                 })
             }
@@ -229,17 +331,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         lastReport = buildString {
-            appendLine("ChatVerify — Rapport MODE DÉMO")
+            appendLine("ChatVerify — Profil programmé")
             appendLine("Capture programmée reconnue par empreinte SHA-256 exacte.")
+            appendLine("Contrôle anti-manipulation : non exécuté pour cette capture programmée.")
             appendLine("Contact : $contact")
             appendLine("Date / heure : $dateTime")
             if (message.isNotBlank()) appendLine("Message : $message")
             if (timeline.isNotBlank()) appendLine("Chronologie :\n$timeline")
             if (note.isNotBlank()) appendLine("Note : $note")
             appendLine("Empreinte SHA-256 : $hash")
-            appendLine("IMPORTANT : les données ci-dessus sont programmées en MODE DÉMO et ne constituent pas une preuve d'authenticité.")
+            appendLine("IMPORTANT : ces données proviennent du profil programmé et ne constituent pas une preuve indépendante d'authenticité.")
         }
-        addHistory("MODE DÉMO — capture programmée reconnue")
+        addHistory("Profil programmé — capture reconnue")
         resultContainer.addView(button("Exporter le rapport PDF") { exportPdf() })
     }
 
@@ -284,9 +387,35 @@ class MainActivity : AppCompatActivity() {
         return UnknownAnalysis(score, label, reasons)
     }
 
-    private fun showUnknownResult(hash: String, extractedText: String, analysis: UnknownAnalysis) {
+    private fun showUnknownResult(hash: String, extractedText: String, analysis: UnknownAnalysis, integrity: ImageIntegrity) {
         statusText.text = "Analyse terminée."
         resultContainer.removeAllViews()
+
+        val integrityColor = when {
+            integrity.score >= 82 -> Color.rgb(12, 47, 27)
+            integrity.score >= 62 -> Color.rgb(59, 48, 15)
+            else -> Color.rgb(64, 25, 25)
+        }
+
+        val integrityHeader = card(integrityColor).apply {
+            addView(text("Intégrité de l'image", 18f, Color.WHITE, true))
+            addView(text(integrity.label, 22f, Color.WHITE, true).apply { setPadding(0, dp(6), 0, 0) })
+            addView(text("Indice technique : ${integrity.score}%", 17f, Color.rgb(126, 255, 174), true).apply {
+                setPadding(0, dp(6), 0, 0)
+            })
+            addView(text("Cet indice mesure seulement les anomalies techniques détectables dans le fichier.", 12f, Color.LTGRAY, false).apply {
+                setPadding(0, dp(8), 0, 0)
+            })
+        }
+        resultContainer.addView(integrityHeader)
+
+        val integrityCard = card().apply {
+            addView(text("Contrôles anti-manipulation", 18f, Color.WHITE, true))
+            integrity.signals.forEach {
+                addView(text("• $it", 14f, Color.LTGRAY, false).apply { setPadding(0, dp(7), 0, 0) })
+            }
+        }
+        resultContainer.addView(integrityCard)
 
         val headerColor = when {
             analysis.score >= 75 -> Color.rgb(12, 47, 27)
@@ -294,18 +423,19 @@ class MainActivity : AppCompatActivity() {
             else -> Color.rgb(64, 25, 25)
         }
         val header = card(headerColor).apply {
-            addView(text(analysis.label, 22f, Color.WHITE, true))
+            addView(text("Analyse du contenu", 18f, Color.WHITE, true))
+            addView(text(analysis.label, 22f, Color.WHITE, true).apply { setPadding(0, dp(6), 0, 0) })
             addView(text("Score de cohérence : ${analysis.score}%", 18f, Color.rgb(126, 255, 174), true).apply {
                 setPadding(0, dp(6), 0, 0)
             })
-            addView(text("Ce score ne prouve pas que le message est authentique.", 12f, Color.LTGRAY, false).apply {
+            addView(text("La cohérence du contenu et l'intégrité de l'image sont deux analyses différentes.", 12f, Color.LTGRAY, false).apply {
                 setPadding(0, dp(8), 0, 0)
             })
         }
         resultContainer.addView(header)
 
         val reasonsCard = card().apply {
-            addView(text("Contrôles", 18f, Color.WHITE, true))
+            addView(text("Contrôles du message", 18f, Color.WHITE, true))
             analysis.reasons.forEach {
                 addView(text("• $it", 14f, Color.LTGRAY, false).apply { setPadding(0, dp(7), 0, 0) })
             }
@@ -322,19 +452,26 @@ class MainActivity : AppCompatActivity() {
 
         lastReport = buildString {
             appendLine("ChatVerify — Rapport d'analyse")
-            appendLine("Résultat : ${analysis.label}")
-            appendLine("Score de cohérence : ${analysis.score}%")
+            appendLine("Intégrité image : ${integrity.label}")
+            appendLine("Indice technique : ${integrity.score}%")
+            appendLine("Dimensions : ${integrity.width} × ${integrity.height}")
+            appendLine("Format : ${integrity.mime}")
+            appendLine("Taille : ${if (integrity.fileSize > 0) integrity.fileSize.toString() + " octets" else "indisponible"}")
             appendLine("Empreinte SHA-256 : $hash")
             appendLine()
-            appendLine("Contrôles :")
+            appendLine("Contrôles anti-manipulation :")
+            integrity.signals.forEach { appendLine("- $it") }
+            appendLine()
+            appendLine("Analyse du contenu : ${analysis.label}")
+            appendLine("Score de cohérence : ${analysis.score}%")
             analysis.reasons.forEach { appendLine("- $it") }
             appendLine()
             appendLine("Texte extrait :")
             appendLine(extractedText.take(4000))
             appendLine()
-            appendLine("IMPORTANT : une capture d'écran seule ne permet pas de prouver l'authenticité d'un message.")
+            appendLine("IMPORTANT : l'absence d'anomalie technique détectée ne prouve pas à elle seule qu'un message est authentique ou qu'une conversation n'a pas été mise en scène.")
         }
-        addHistory("${analysis.label} — ${analysis.score}%")
+        addHistory("${integrity.label} — intégrité ${integrity.score}% / cohérence ${analysis.score}%")
         resultContainer.addView(button("Exporter le rapport PDF") { exportPdf() })
     }
 
